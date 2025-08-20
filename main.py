@@ -3,18 +3,23 @@ from typing import Annotated, List
 from rich import print as printR
 import ollama
 import chat 
+import history
 from InquirerPy import prompt
 from sqlmodel import create_engine, Field, SQLModel, Session, select, Relationship
 import os
 from models import  User
+from dotenv import load_dotenv
 
-DATABASE_URL = "postgresql+psycopg://postgres:password@localhost:5432/cli-db"
+load_dotenv()
+
+DATABASE_URL = os.getenv("DB_URL")
 engine = create_engine(DATABASE_URL)  # echo=True logs SQL
 
 
 #! Check if the database connection is successful
 def checkDBConnection():
     with engine.connect() as connection:
+        SQLModel.metadata.create_all(engine)  # Create tables if they don't exist
         printR("[bold green]Connection successful![/bold green]")
 
 #! Register the User
@@ -26,11 +31,16 @@ def registerUser():
     password = typer.prompt("Enter your password", hide_input=True)
     
     user = User(first_name=first_name, last_name=last_name, username=username, password=password)
-    SQLModel.metadata.create_all(engine)  # Create tables if they don't exist
-    with Session(engine) as session:
-        session.add(user)
-        session.commit()
-        printR("[bold green]User registered successfully![/bold green]")
+    try:
+        with Session(engine) as session:
+            session.add(user)
+            session.commit()
+            session.refresh(user) # ensures user.id is available
+            printR("[bold green]User registered successfully![/bold green]")
+            return user
+    except Exception as e:
+        printR(f"[bold red]Error registering user: {e}[/bold red]")
+        return None
 
 #! Login the User
 def loginUser():
@@ -57,7 +67,7 @@ def main():
         "choices": ["Login","Register"],
     },
     ]
-    result = prompt(questions)
+    result = prompt(questions,style={"pointer": "fg:white bg:#ff9d00 bold"}, vi_mode=True, style_override=False)
     command = result[0]
     
     if command == "Login":
@@ -83,18 +93,44 @@ def main():
                 "choices": ["Chat", "History"],
             },
         ]
-        result = prompt(questions)
+        result = prompt(questions,style={"pointer": "fg:white bg:#ff9d00 bold"}, vi_mode=True, style_override=False)
         command = result[0]
+        import sys
         if command == "Chat":
-            import sys
-            printR('[bold yellow]user in main[/bold yellow]',str(user.id))
             sys.argv = ["main.py", "start-chat", str(user.id)]
             chat.app()  # Typer will now parse args and run callback
         elif command == "History":
-            printR("[bold green]History command is not implemented yet.[/bold green]")
+            sys.argv = ["history.py", "get-history", str(user.id)]
+            history.app()
         
     elif command == "Register":
-        registerUser()
-
+        user = None
+        while not user:
+            user = registerUser()
+            if not user:
+                printR("[bold red]Try again![/bold red]")
+        
+        if os.name == "nt":
+            os.system("cls")
+        # Linux / Mac
+        else:
+            os.system("clear") 
+        printR(f"[bold purple]Welcome {user.first_name} {user.last_name}![/bold purple]")
+        questions = [
+            {
+                "type": "list",
+                "message": "Select the command you want to run:",
+                "choices": ["Chat", "History"],
+            },
+        ]
+        result = prompt(questions)
+        command = result[0]
+        import sys
+        if command == "Chat":
+            sys.argv = ["main.py", "start-chat", str(user.id)]
+            chat.app()  # Typer will now parse args and run callback
+        elif command == "History":
+            sys.argv = ["history.py", "get-history", str(user.id)]
+            history.app()
 if __name__ == "__main__":
     typer.run(main)
