@@ -18,13 +18,12 @@ app = typer.Typer()
 def callback():
     #! Check if the database connection is successful
     with engine.connect() as connection:
-        printR("✅ Connection successful!")
+        # printR("✅ Connection successful!")
         SQLModel.metadata.create_all(engine)
 
 @app.command(help="Get user history")
 def get_history(user_id:Annotated[int,typer.Argument()]):
     # user_id = int(user_id)
-    printR(f"[bold purple] History requested for user_id:${user_id} type:${type(user_id)} [/bold purple]")
     while True:
         history=[]
         with Session(engine) as session:

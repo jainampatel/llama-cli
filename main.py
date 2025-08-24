@@ -21,7 +21,7 @@ engine = create_engine(DATABASE_URL)  # echo=True logs SQL
 def checkDBConnection():
     with engine.connect() as connection:
         SQLModel.metadata.create_all(engine)  # Create tables if they don't exist
-        printR("[bold green]Connection successful![/bold green]")
+        # printR("[bold green]Connection successful![/bold green]")
 
 #! to clear the terminal
 def clear_cli():
@@ -109,6 +109,7 @@ def select_options(user):
         sys.argv = ["history.py", "get-history", str(user.id)]
         history.app()
 
+#* Main method
 def main():
     checkDBConnection()
     printR("[bold blue]Welcome to the Ollama CLI![/bold blue]")
