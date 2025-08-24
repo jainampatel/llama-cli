@@ -3,6 +3,7 @@ from typing import Annotated
 from rich import print as printR
 import ollama
 from sqlmodel import create_engine, SQLModel,Session, select
+from sqlalchemy.orm import selectinload
 from models import User, Chat, Chat_interactions
 from dotenv import load_dotenv
 import os
@@ -12,6 +13,7 @@ load_dotenv()
 DATABASE_URL = os.getenv("DB_URL")
 engine = create_engine(DATABASE_URL)  # echo=True logs SQL
 chat_id = None
+loaded_chat = False
 
 #system prompt to get the title
 system_prompt = {"role":"system","content":"In the response also add a title of the response by summarizing the question context. Syntax for title is 'Title: some title\n' and Always start the response after the title from new line. Make the title simple and more relevant to prompt."}
@@ -22,16 +24,17 @@ app = typer.Typer()
 def callback():
     #! Check if the database connection is successful
     with engine.connect() as connection:
-        printR("✅ Connection successful!")
+        # printR("✅ Connection successful!")
         SQLModel.metadata.create_all(engine)
     
 
 #! fetch the selected chat
 def get_chat(id):
     with Session(engine) as session:
-        statement = select(Chat).where(Chat.id == id)
+        statement = select(Chat).where(Chat.id == id).options(selectinload(Chat.interactions)) #! selectinload(Chat.interactions) is used to set interactions to eager loading
         chat = session.exec(statement).first()
         if chat:
+            # printR(f"[green]interactions[/green]",chat.interactions)
             return chat
         else:
             return None
@@ -39,15 +42,21 @@ def get_chat(id):
 
 
 @app.command(help="Start a chat with the model")
-def start_chat(user: Annotated[str, typer.Argument()],prompt: Annotated[str, typer.Option(prompt="Enter your message (or type '/bye' to exit)")],selected_chat_id: Annotated[int,typer.Argument()] = None):
+def start_chat(user: Annotated[str, typer.Argument()],selected_chat_id: Annotated[int,typer.Argument()] = None):
     global chat_id
+    global loaded_chat
     selected_chat = None
     if selected_chat_id:
         chat_id = selected_chat_id
+        loaded_chat = True
         selected_chat = get_chat(chat_id)
     if selected_chat:
-        printR(f"[bold yellow] {selected_chat} [/bold yellow]")
+        for interaction in selected_chat.interactions:
+            printR("\n\n[blue]Enter your message (or type '/bye' to exit): [/blue]" + interaction.user_prompt + "\n")
+            printR(f"[bold green]Response:[/bold green]\n")
+            printR(interaction.system_response + "\n")
     while(True):
+        prompt = typer.prompt(typer.style("Enter your message (or type '/bye' to exit)",fg=typer.colors.BLUE))
         if(prompt == "/bye"):
             printR("[bold green]Exiting chat...[/bold green]")
             raise typer.Exit()
@@ -73,7 +82,7 @@ def start_chat(user: Annotated[str, typer.Argument()],prompt: Annotated[str, typ
                 session.commit()
             printR("\n")
 
-            start_chat(user=user,prompt=typer.prompt("Enter your message (or type '/bye' to exit)"))
+            start_chat(user=user)
 
 
 if __name__ == "__main__":
