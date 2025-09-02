@@ -73,8 +73,6 @@ def get_relevant_chat(chat_id: int, user_prompt: str, k: int = 5) -> List[Dict[s
                 "k": k
             }
         ).all()
-    printR("[red bold] user_prompt [/red bold]", user_prompt)
-    printR([{"id": r[0], "text": r[1]} for r in rows])
     if len(rows):
         joined = "\n---\n".join(r[1] for r in rows)
         return f"Relevant prior snippets:\n{joined}\n\n"
@@ -100,21 +98,24 @@ def start_chat(user: Annotated[str, typer.Argument()],selected_chat_id: Annotate
     while(True):
         prompt = typer.prompt(typer.style("Enter your message (or type '/bye' to exit)",fg=typer.colors.BLUE))
         search_result = get_relevant_chat(chat_id=chat_id,user_prompt=prompt)
-        if search_result: 
-            print(search_result)
         if(prompt == "/bye"):
             printR("[bold green]Exiting chat...[/bold green]")
             raise typer.Exit()
         else:
-            response = ollama.chat("llama3.2:latest", messages=[system_prompt,{"role":"system","content":search_result} if search_result else None, {"role":"user", "content":prompt}], stream=True);
+            messages = [system_prompt,{"role":"system","content":search_result}, {"role":"user", "content":prompt}] if search_result else [system_prompt,{"role":"user", "content":prompt}]
+            response = ollama.chat("llama3.2:latest", messages=messages, stream=True);
             printR(f"[bold green]Response:[/bold green]")
             llm_response = ''
             for chunk in response:
                 printR(chunk['message']['content'], end='', flush=True)
                 llm_response += chunk['message']['content']
             splited_response = llm_response.split('\n',1)
-            response_title = splited_response[0].lstrip("Title: ")
-            response_content = splited_response[1].lstrip("\n") 
+            if(len(splited_response) > 1):
+                response_title = splited_response[0].lstrip("Title: ")
+                response_content = splited_response[1].lstrip("\n") 
+            else:
+                response_title = prompt
+                response_content = llm_response
             if(chat_id is None):
                 #! saves the chat group in DB
                 chat = Chat(title=response_title,user_id=int(user))
