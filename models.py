@@ -1,5 +1,10 @@
 from sqlmodel import create_engine, Field, SQLModel, Session, select, Relationship
 from typing import List
+from pgvector.sqlalchemy import Vector
+from sqlalchemy import Column
+
+EMBED_DIM = 384  
+
 
 #* User model
 class User(SQLModel, table=True):
@@ -31,3 +36,11 @@ class Chat_interactions(SQLModel, table=True):
     chat_id: int = Field(foreign_key="chat.id")
     #For python object mapping
     chat: "Chat" = Relationship(back_populates="interactions")
+
+#* Chat vectors model
+class Chat_vectors(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    chat_interaction_id: int = Field(foreign_key="chat_interactions.id")
+    text: str  
+    chat_id: int = Field(foreign_key="chat.id")
+    embedding: List[float] = Field(sa_column=Column(Vector(EMBED_DIM)))
