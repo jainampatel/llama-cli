@@ -3,6 +3,7 @@ from typing import Annotated, List
 from rich import print as printR
 import ollama
 import chat 
+import summarize
 import history
 from InquirerPy import prompt, inquirer
 from sqlmodel import create_engine, Field, SQLModel, Session, select, Relationship
@@ -10,6 +11,7 @@ import os
 from models import  User
 from dotenv import load_dotenv
 
+from rich.progress import Progress, SpinnerColumn, TextColumn,track
 
 load_dotenv()
 
@@ -30,6 +32,15 @@ def clear_cli():
     # Linux / Mac
     else:
         os.system("clear") 
+
+# #! Loading Spinner
+# def loader():
+#     with Progress(
+#         SpinnerColumn(),
+#         TextColumn("[progress.description]{task.description}"),
+#         transient=True,
+#     ) as progress:
+        
 
 #! Register method
 def registerUser():
@@ -96,7 +107,7 @@ def select_options(user):
         {
             "type": "list",
             "message": "Select the command you want to run:",
-            "choices": ["Chat", "History"],
+            "choices": ["Chat", "Summarize", "History"],
         },
     ]
     result = prompt(questions,style={"pointer": "fg:white bg:#ff9d00 bold"}, vi_mode=True, style_override=False)
@@ -105,6 +116,8 @@ def select_options(user):
     if command == "Chat":
         sys.argv = ["main.py", "start-chat", str(user.id)]
         chat.app()  # Typer will now parse args and run callback
+    elif command == "Summarize":
+        summarize.app()
     elif command == "History":
         sys.argv = ["history.py", "get-history", str(user.id)]
         history.app()

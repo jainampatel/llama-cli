@@ -8,6 +8,11 @@ from models import User, Chat, Chat_interactions, Chat_vectors
 from dotenv import load_dotenv
 from sentence_transformers import SentenceTransformer
 import os
+from rich.console import Console
+from rich.status import Status
+
+
+console = Console()
 
 load_dotenv()
 
@@ -104,40 +109,44 @@ def start_chat(user: Annotated[str, typer.Argument()],selected_chat_id: Annotate
         else:
             messages = [system_prompt,{"role":"system","content":search_result}, {"role":"user", "content":prompt}] if search_result else [system_prompt,{"role":"user", "content":prompt}]
             response = ollama.chat("llama3.2:latest", messages=messages, stream=True);
-            printR(f"[bold green]Response:[/bold green]")
-            llm_response = ''
-            for chunk in response:
-                printR(chunk['message']['content'], end='', flush=True)
-                llm_response += chunk['message']['content']
-            splited_response = llm_response.split('\n',1)
-            if(len(splited_response) > 1):
-                response_title = splited_response[0].lstrip("Title: ")
-                response_content = splited_response[1].lstrip("\n") 
-            else:
-                response_title = prompt
-                response_content = llm_response
-            if(chat_id is None):
-                #! saves the chat group in DB
-                chat = Chat(title=response_title,user_id=int(user))
+            # *show spinner while waiting for response
+            with console.status("[bold yellow]Thinking...", spinner="dots") as status:
+                printR(f"[bold green]Response:[/bold green]")
+                llm_response = ''
+                for chunk in response:
+                    #* stop the spinner after first token
+                    status.stop()
+                    printR(chunk['message']['content'], end='', flush=True)
+                    llm_response += chunk['message']['content']
+                splited_response = llm_response.split('\n',1)
+                if(len(splited_response) > 1):
+                    response_title = splited_response[0].lstrip("Title: ")
+                    response_content = splited_response[1].lstrip("\n") 
+                else:
+                    response_title = prompt
+                    response_content = llm_response
+                if(chat_id is None):
+                    #! saves the chat group in DB
+                    chat = Chat(title=response_title,user_id=int(user))
+                    with Session(engine) as session:
+                        session.add(chat)
+                        session.commit()
+                        chat_id = chat.id
+                #! saves the chat interactions in DB
+                chat_ineraction = Chat_interactions(user_prompt=prompt,system_response=response_content,chat_id=chat_id)
                 with Session(engine) as session:
-                    session.add(chat)
+                    session.add(chat_ineraction)
                     session.commit()
-                    chat_id = chat.id
-            #! saves the chat interactions in DB
-            chat_ineraction = Chat_interactions(user_prompt=prompt,system_response=response_content,chat_id=chat_id)
-            with Session(engine) as session:
-                session.add(chat_ineraction)
-                session.commit()
-                session.refresh(chat_ineraction) #! to use chat_interaction.id later in the code
-            printR("\n")
-            #! saves the chat interaction vector in DB
-            user_interaction = "User prompt:"+prompt+"\n"+"Response:"+response_content
-            embedding = generate_embeddings(user_interaction)
-            chat_embedding = Chat_vectors(chat_interaction_id=chat_ineraction.id,text=user_interaction,chat_id=chat_id,embedding=embedding)
-            with Session(engine) as session:
-                session.add(chat_embedding)
-                session.commit()
-            start_chat(user=user)
+                    session.refresh(chat_ineraction) #! to use chat_interaction.id later in the code
+                printR("\n")
+                #! saves the chat interaction vector in DB
+                user_interaction = "User prompt:"+prompt+"\n"+"Response:"+response_content
+                embedding = generate_embeddings(user_interaction)
+                chat_embedding = Chat_vectors(chat_interaction_id=chat_ineraction.id,text=user_interaction,chat_id=chat_id,embedding=embedding)
+                with Session(engine) as session:
+                    session.add(chat_embedding)
+                    session.commit()
+                start_chat(user=user)
 
 
 if __name__ == "__main__":
